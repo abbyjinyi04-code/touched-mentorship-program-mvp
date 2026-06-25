@@ -66,6 +66,17 @@ const tutorialSteps = [
   { icon: "✨", title: "发问会触发匹配", text: "写下问题后，系统会根据档案、优先级、距离、MBTI和擅长领域推荐姐妹。" },
   { icon: "💬", title: "确认后进入触碰", text: "拉手被接受后，会进入链接协议和72小时试聊。故事可以留在她意识，个人信息在我的页面管理。" }
 ];
+const relationshipMeta = {
+  mentorship: { icon: "🎓", label: "Mentorship", tone: "专注、有方向感", cls: "mentor" },
+  "搭子": { icon: "👯", label: "搭子", tone: "轻松、并肩感", cls: "buddy" },
+  "陪伴": { icon: "🫂", label: "轻陪伴", tone: "温柔、无压力", cls: "care" },
+  "轻陪伴": { icon: "🫂", label: "轻陪伴", tone: "温柔、无压力", cls: "care" }
+};
+const adminReviewTypes = {
+  questions: "烦恼屋问题",
+  posts: "派对屋帖子",
+  stories: "她意识故事"
+};
 
 let state = loadState();
 
@@ -273,9 +284,9 @@ function initialState() {
       { id: uid("p"), userId: "TCH-3302", nickname: "星遥", text: "今晚的冥想关键词：把心放回身体里。", image: "", likes: 12, comments: [], saved: false, createdAt: Date.now() - 1800000 }
     ],
     stories: [
-      { id: uid("s"), userId: "TCH-3302", nickname: "匿名姐妹", anonymous: true, text: "我曾经以为敏感是缺点，后来发现它也是接收世界细节的方式。现在我开始学习给感受留位置。", touches: 31, createdAt: Date.now() - 9400000 },
-      { id: uid("s"), userId: "TCH-5088", nickname: "白芷", anonymous: false, text: "离开第一份消耗感很强的工作后，我重新学习如何相信自己的判断。那段路不轻松，但它让我长出新的骨头。", touches: 27, createdAt: Date.now() - 6400000 },
-      { id: uid("s"), userId: "TCH-2116", nickname: "匿名姐妹", anonymous: true, text: "第一次向女性朋友坦白野心时，我没有被嘲笑，反而被认真讨论。这种被接住的感觉，我记了很久。", touches: 46, createdAt: Date.now() - 2400000 }
+      { id: uid("s"), userId: "TCH-3302", nickname: "匿名姐妹", anonymous: true, reviewStatus: "approved", text: "我曾经以为敏感是一种缺点。小时候，家里人总说我想太多，朋友也劝我不要把每句话都放在心上。于是很长一段时间里，我努力把自己训练成一个看起来很轻松的人：不追问、不表达、不把失望说出口。后来有一天，我在深夜写日记，突然发现那些被我压下去的感受并没有消失，它们只是换成了身体里的疲惫、关系里的退缩、和一次次自我怀疑。现在我开始重新理解敏感。它让我听见语气里的犹豫，看见沉默里的求救，也让我更愿意温柔地对待自己。也许女性的生命里有很多被要求变钝的时刻，而我想把这个故事留下来，提醒另一个相似的姐妹：妳不是太多，妳只是很认真地活着。", touches: 31, createdAt: Date.now() - 9400000 },
+      { id: uid("s"), userId: "TCH-5088", nickname: "白芷", anonymous: false, reviewStatus: "approved", text: "离开第一份消耗感很强的工作后，我花了很久才重新相信自己的判断。那几年我总是在证明自己值得被留下，愿意接下额外任务，愿意把周末交出去，愿意在被否定以后先反省是不是自己还不够好。真正离开的那天没有想象中潇洒，我站在地铁口哭了很久，像是终于承认自己也会累。后来我用很慢的速度重新搭生活：固定吃早餐，学会看合同，开始记账，也开始拒绝一些让我身体先发出警报的合作。现在我运营自己的小事业，依然会害怕，但我不再把害怕当成失败。女性的独立不是突然长出铠甲，而是一点点把选择权拿回手里。写下这段，是想给正在低谷里怀疑自己的姐妹一个证据：妳可以慢慢来，慢慢也算数。", touches: 27, createdAt: Date.now() - 6400000 },
+      { id: uid("s"), userId: "TCH-2116", nickname: "匿名姐妹", anonymous: true, reviewStatus: "approved", text: "第一次向女性朋友坦白野心时，我以为自己会被笑。那时我刚到异国生活，语言、身份、钱、未来，每一样都像没有固定形状的雾。我说我想做一个产品，想把女性之间的经验连接起来，想让那些没有被写进主流叙事的路也被看见。朋友没有急着评价，只是拿出纸和笔，问我：那妳想先服务谁？那一刻我记了很久。原来野心也可以被温柔承接，原来女性之间不只有互相安慰，也可以互相点火、互相校准方向。后来这个念头像一颗小种子，在很多次迷茫里救过我。她意识对我来说，就是把这些未被命名的瞬间存下来：一个眼神、一句认真提问、一次被相信的经验，都可能成为另一个女性继续走的力量。", touches: 46, createdAt: Date.now() - 2400000 }
     ],
     links: [],
     chats: []
@@ -296,12 +307,38 @@ function normalizeState(nextState) {
   nextState.questionCursor = Number.isFinite(nextState.questionCursor) ? nextState.questionCursor : 0;
   nextState.questions = asArray(nextState.questions).map((question) => ({
     ...question,
+    reviewStatus: question.reviewStatus || "approved",
     lightReplies: asArray(question.lightReplies)
+  }));
+  nextState.posts = asArray(nextState.posts).map((post) => ({
+    ...post,
+    reviewStatus: post.reviewStatus || "approved"
+  }));
+  nextState.stories = asArray(nextState.stories).map((story) => ({
+    ...story,
+    reviewStatus: story.reviewStatus || "approved"
+  }));
+  nextState.links = asArray(nextState.links).map((link) => ({
+    ...link,
+    type: normalizeRelationType(link.type),
+    createdAt: link.createdAt || Date.now(),
+    growthGoal: link.growthGoal || "建立稳定的成长节奏，把当下最卡住的问题拆成可执行的小步。",
+    checkins: asArray(link.checkins),
+    buddyList: asArray(link.buddyList),
+    diaries: asArray(link.diaries),
+    reviews: asArray(link.reviews),
+    quotes: asArray(link.quotes),
+    status: link.status || "进行中"
+  }));
+  nextState.chats = asArray(nextState.chats).map((chat) => ({
+    ...chat,
+    messages: asArray(chat.messages).map((msg) => ({ ...msg, id: msg.id || uid("msg"), starred: Boolean(msg.starred) }))
   }));
   nextState.users = asArray(nextState.users).map((user) => ({
     ...user,
     tutorialSeen: Boolean(user.tutorialSeen)
   }));
+  nextState.auditLog = asArray(nextState.auditLog);
   return nextState;
 }
 
@@ -328,6 +365,16 @@ function esc(value) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function normalizeRelationType(type) {
+  if (type === "Mentorship" || type === "mentor") return "mentorship";
+  if (type === "轻陪伴") return "陪伴";
+  return type || "mentorship";
+}
+
+function relationMeta(type) {
+  return relationshipMeta[normalizeRelationType(type)] || relationshipMeta.mentorship;
 }
 
 function toast(message) {
@@ -531,6 +578,7 @@ function renderMain() {
             ${state.activeNav === "home" ? `<button class="btn apricot" data-action="open-ask">发问</button>` : ""}
             ${state.activeNav === "archive" ? `<button class="btn lavender" data-action="open-story">写故事</button>` : ""}
             ${state.activeHomeTab === "party" && state.activeNav === "home" ? `<button class="btn secondary" data-action="open-post">发帖</button>` : ""}
+            <button class="icon-btn" data-action="nav" data-nav="admin" title="管理员视角">🛡️</button>
             <button class="icon-btn" data-action="show-notifications" title="通知">🔔${unread ? `<span class="badge">${unread}</span>` : ""}</button>
           </div>
         </header>
@@ -546,6 +594,7 @@ function renderActiveView() {
   if (state.activeNav === "home") return renderHome();
   if (state.activeNav === "touch") return renderTouch();
   if (state.activeNav === "archive") return renderArchive();
+  if (state.activeNav === "admin") return renderAdmin();
   return renderMe();
 }
 
@@ -589,7 +638,7 @@ function zoneClass(zone) {
 }
 
 function renderQuestionFeed() {
-  const questions = [...state.questions].sort((a, b) => b.createdAt - a.createdAt);
+  const questions = [...state.questions].filter((q) => q.reviewStatus !== "hidden").sort((a, b) => b.createdAt - a.createdAt);
   if (!questions.length) return `<div class="empty">暂时没有新的问题。</div>`;
   const index = Math.abs(state.questionCursor || 0) % questions.length;
   const q = questions[index];
@@ -619,7 +668,7 @@ function renderQuestionFeed() {
 }
 
 function renderPartyFeed() {
-  const posts = [...state.posts].sort((a, b) => b.createdAt - a.createdAt);
+  const posts = [...state.posts].filter((post) => post.reviewStatus !== "hidden").sort((a, b) => b.createdAt - a.createdAt);
   return `
     <div class="feed-grid">
       ${posts.map((post, index) => `
@@ -643,11 +692,94 @@ function renderPartyFeed() {
   `;
 }
 
+function relationshipDays(link) {
+  return Math.max(1, Math.ceil((Date.now() - (link.createdAt || Date.now())) / 86400000));
+}
+
+function linkForChat(chat) {
+  return state.links.find((link) => link.chatId === chat.id)
+    || state.links.find((link) => link.memberIds.every((id) => chat.memberIds.includes(id)));
+}
+
+function chatForLink(link) {
+  return state.chats.find((chat) => chat.id === link.chatId)
+    || state.chats.find((chat) => link.memberIds.every((id) => chat.memberIds.includes(id)));
+}
+
+function ensureDemoRelationships() {
+  const user = currentUser();
+  if (!user) return;
+  const existing = state.links.filter((link) => link.memberIds.includes(user.id));
+  if (existing.length) return;
+  const demos = [
+    {
+      targetId: "TCH-1028",
+      type: "mentorship",
+      cycle: "1-3个月",
+      frequency: "每周一次",
+      goal: "三周内梳理职业方向，完成一版成长路径和两次复盘。",
+      first: "我们把目标放在顶部，之后每次聊都能回到这个方向。"
+    },
+    {
+      targetId: "TCH-2116",
+      type: "搭子",
+      cycle: "随缘",
+      frequency: "不定期",
+      goal: "一起做一个轻量项目清单，互相提醒但不互相压迫。",
+      first: "今天先把想一起完成的小事列出来吧。"
+    },
+    {
+      targetId: "TCH-3302",
+      type: "陪伴",
+      cycle: "长期半年以上",
+      frequency: "随时",
+      goal: "低压力陪伴，允许沉默，也允许只发一个心情贴纸。",
+      first: "不用急着说完整，只要知道这里有人在。"
+    }
+  ];
+  demos.forEach((demo, index) => {
+    const target = getUser(demo.targetId);
+    if (!target) return;
+    const chatId = uid("chat");
+    const linkId = uid("link");
+    state.links.push({
+      id: linkId,
+      chatId,
+      memberIds: [user.id, target.id],
+      type: demo.type,
+      cycle: demo.cycle,
+      frequency: demo.frequency,
+      status: "进行中",
+      reason: "内测演示关系，用于体验不同聊天界面。",
+      createdAt: Date.now() - (index + 2) * 86400000,
+      growthGoal: demo.goal,
+      checkins: [],
+      buddyList: demo.type === "搭子" ? ["一起完成一周三次打卡", "周末交换灵感清单"] : [],
+      diaries: [],
+      reviews: [],
+      quotes: []
+    });
+    state.chats.push({
+      id: chatId,
+      memberIds: [user.id, target.id],
+      messages: [
+        { id: uid("msg"), from: target.id, text: demo.first, createdAt: Date.now() - 600000 },
+        { id: uid("msg"), from: user.id, text: "收到，我想慢慢试试看。", createdAt: Date.now() - 540000 }
+      ],
+      createdAt: Date.now() - (index + 2) * 86400000
+    });
+  });
+  state.activeChatId = state.chats.find((chat) => chat.memberIds.includes(user.id))?.id || state.activeChatId;
+  saveState();
+}
+
 function renderTouch() {
+  ensureDemoRelationships();
   const chats = state.chats.filter((chat) => chat.memberIds.includes(state.currentUserId));
   const links = state.links.filter((link) => link.memberIds.includes(state.currentUserId));
   const activeChat = chats.find((chat) => chat.id === state.activeChatId) || chats[0];
   if (!state.activeChatId && activeChat) state.activeChatId = activeChat.id;
+  const activeLink = activeChat ? linkForChat(activeChat) : null;
   return `
     <section class="split">
       <div class="stack">
@@ -661,15 +793,19 @@ function renderTouch() {
           <h2>深度链接管理</h2>
           ${links.length ? links.map((link) => `
             <div class="soft-panel">
-              <div><strong>${esc(link.type)}</strong> · ${esc(link.cycle)} · ${esc(link.frequency)}</div>
-              <div class="hint">状态：${esc(link.status)} · 72小时试聊已开放</div>
+              <div class="tag-row">
+                <span class="tag ${relationMeta(link.type).cls}">${relationMeta(link.type).icon} ${esc(relationMeta(link.type).label)}</span>
+                <span class="tag warm">已建立${relationshipDays(link)}天</span>
+              </div>
+              <div style="margin-top:8px"><strong>${esc(link.cycle)}</strong> · ${esc(link.frequency)}</div>
+              <div class="hint">状态：${esc(link.status)} · ${esc(relationMeta(link.type).tone)}</div>
               <div class="hint">匹配理由：${esc(link.reason)}</div>
             </div>
           `).join("") : `<div class="empty">确认链接后，会显示 mentorship / 搭子 / 陪伴关系。</div>`}
         </div>
       </div>
       <div class="card chat-window">
-        ${activeChat ? renderChatWindow(activeChat) : `<div class="empty">暂无私聊</div>`}
+        ${activeChat && activeLink ? renderChatWindow(activeChat, activeLink) : `<div class="empty">暂无私聊</div>`}
       </div>
     </section>
   `;
@@ -678,28 +814,35 @@ function renderTouch() {
 function renderChatRow(chat) {
   const peer = getPeer(chat.memberIds);
   const last = chat.messages[chat.messages.length - 1];
+  const link = linkForChat(chat);
+  const meta = relationMeta(link?.type);
   return `
-    <button class="soft-panel person-row" data-action="select-chat" data-id="${chat.id}" style="text-align:left">
+    <button class="soft-panel person-row ${state.activeChatId === chat.id ? "active-chat-row" : ""}" data-action="select-chat" data-id="${chat.id}" style="text-align:left">
       <div class="avatar">${esc(peer.avatar || peer.profile.nickname.slice(0, 1))}</div>
       <div>
         <strong>${esc(peer.profile.nickname)}</strong>
         <div class="hint">${esc(last?.text || "试聊已开启")}</div>
       </div>
-      <span class="tag purple">72h</span>
+      <span class="tag ${meta.cls}">${meta.icon} ${esc(meta.label)}</span>
     </button>
   `;
 }
 
-function renderChatWindow(chat) {
+function renderChatWindow(chat, link) {
   const peer = getPeer(chat.memberIds);
+  const meta = relationMeta(link.type);
   return `
-    <div class="person-row" style="padding:16px;border-bottom:1px solid var(--line)">
+    <div class="person-row relation-header ${meta.cls}">
       <div class="avatar">${esc(peer.avatar || peer.profile.nickname.slice(0, 1))}</div>
-      <div><strong>${esc(peer.profile.nickname)}</strong><div class="hint">平台内置私聊 · 温柔气泡模式</div></div>
-      <span></span>
+      <div>
+        <strong>${meta.icon} ${esc(peer.profile.nickname)} · ${esc(meta.label)}</strong>
+        <div class="hint">${esc(meta.tone)} · 已建立${relationshipDays(link)}天 · ${esc(link.status)}</div>
+      </div>
+      <span class="tag ${meta.cls}">${esc(link.frequency)}</span>
     </div>
+    ${renderRelationTools(link, chat)}
     <div class="messages">
-      ${chat.messages.map((msg) => `<div class="msg ${msg.from === state.currentUserId ? "mine" : "theirs"}">${esc(msg.text)}</div>`).join("")}
+      ${chat.messages.map((msg) => renderMessage(msg, chat, link)).join("")}
     </div>
     <div class="chat-compose">
       <input class="input" id="chat-input" placeholder="写下想说的话" />
@@ -708,8 +851,83 @@ function renderChatWindow(chat) {
   `;
 }
 
+function renderMessage(msg, chat, link) {
+  const mine = msg.from === state.currentUserId;
+  const quoteable = normalizeRelationType(link.type) === "mentorship";
+  return `
+    <div class="msg-wrap ${mine ? "mine" : "theirs"}">
+      <div class="msg ${mine ? "mine" : "theirs"} ${msg.kind ? "special-msg" : ""}">
+        ${msg.kind ? `<div class="tiny">${esc(msg.kind)}</div>` : ""}
+        ${esc(msg.text)}
+      </div>
+      ${quoteable ? `<button class="quote-btn" data-action="toggle-quote" data-chat-id="${chat.id}" data-msg-id="${msg.id || ""}">${msg.starred ? "已收藏金句" : "标记成长金句"}</button>` : ""}
+    </div>
+  `;
+}
+
+function renderRelationTools(link, chat) {
+  const type = normalizeRelationType(link.type);
+  if (type === "mentorship") return renderMentorshipTools(link, chat);
+  if (type === "搭子") return renderBuddyTools(link);
+  return renderCareTools(link);
+}
+
+function renderMentorshipTools(link, chat) {
+  const latest = asArray(link.checkins)[0];
+  return `
+    <div class="relation-tools mentor">
+      <div class="soft-panel goal-panel">
+        <div class="tiny">成长目标固定显示</div>
+        <strong>${esc(link.growthGoal)}</strong>
+      </div>
+      <div class="tool-grid">
+        <button class="btn secondary" data-action="goal-checkin" data-link-id="${link.id}">目标打卡</button>
+        <button class="btn secondary" data-action="open-diary" data-link-id="${link.id}">感受日记</button>
+        <button class="btn secondary" data-action="cycle-review" data-link-id="${link.id}">周期复盘</button>
+        <button class="btn secondary" data-action="renew-link" data-link-id="${link.id}">续期</button>
+        <button class="btn ghost" data-action="pause-link" data-link-id="${link.id}">暂停/结束</button>
+      </div>
+      <div class="hint">提醒：这段时间妳们走过了什么？写下来留个印记吧～</div>
+      ${latest ? `<div class="mini-note">最近打卡：${esc(latest.text)}<br><span class="hint">mentor回应：${esc(latest.reply)}</span></div>` : ""}
+      ${asArray(link.quotes).length ? `<div class="mini-note">成长金句：${asArray(link.quotes).map((q) => esc(q.text)).join(" / ")}</div>` : ""}
+      ${asArray(link.reviews).length ? `<div class="mini-note">复盘已完成：${asArray(link.reviews).map((r) => esc(r.text)).join(" / ")}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderBuddyTools(link) {
+  return `
+    <div class="relation-tools buddy">
+      <div class="tool-grid">
+        <button class="btn secondary" data-action="add-buddy-item" data-link-id="${link.id}">添加搭子清单</button>
+        <button class="btn secondary" data-action="buddy-sticker" data-link-id="${link.id}">今日打卡贴纸</button>
+        <button class="btn secondary" data-action="open-diary" data-link-id="${link.id}">感受日记</button>
+        <button class="btn ghost" data-action="pause-link" data-link-id="${link.id}">暂停/结束</button>
+      </div>
+      <div class="hint">系统轻提醒：妳们的搭子之旅还在继续吗～</div>
+      <div class="buddy-list">
+        ${asArray(link.buddyList).length ? asArray(link.buddyList).map((item) => `<span class="tag warm">${esc(item)}</span>`).join("") : `<span class="hint">还没有共享清单。</span>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderCareTools(link) {
+  return `
+    <div class="relation-tools care">
+      <div class="tool-grid">
+        <button class="btn secondary" data-action="mood-sticker" data-link-id="${link.id}">今天的心情</button>
+        <button class="btn secondary" data-action="voice-note" data-link-id="${link.id}">语音小留言</button>
+        <button class="btn secondary" data-action="open-diary" data-link-id="${link.id}">感受日记</button>
+        <button class="btn ghost" data-action="pause-link" data-link-id="${link.id}">暂停/结束</button>
+      </div>
+      <div class="hint">系统轻轻说：去看看她还好吗🌸</div>
+    </div>
+  `;
+}
+
 function renderArchive() {
-  const stories = [...state.stories].sort((a, b) => b.createdAt - a.createdAt);
+  const stories = [...state.stories].filter((story) => story.reviewStatus !== "hidden").sort((a, b) => b.createdAt - a.createdAt);
   return `
     <section class="stack">
       <div class="card profile-card">
@@ -785,11 +1003,80 @@ function renderMe() {
           <h2>正在陪伴我的姐妹 / 我正在陪伴的姐妹</h2>
           ${myLinks.length ? myLinks.map((link) => {
             const peer = getPeer(link.memberIds);
-            return `<div class="soft-panel"><strong>${esc(peer.profile.nickname)}</strong><div class="hint">${esc(link.type)} · ${esc(link.status)}</div></div>`;
+            return `<div class="soft-panel"><strong>${esc(peer.profile.nickname)}</strong><div class="hint">${relationMeta(link.type).icon} ${esc(relationMeta(link.type).label)} · ${esc(link.status)} · 已建立${relationshipDays(link)}天</div></div>`;
           }).join("") : `<div class="empty">拉手确认后会展示深度链接关系。</div>`}
+        </div>
+        <div class="card profile-card logout-zone">
+          <h2>账号</h2>
+          <p class="hint">退出后会回到最开始的欢迎界面，本机内测数据仍保存在当前浏览器。</p>
+          <button class="btn secondary" data-action="logout">退出登录</button>
         </div>
       </div>
     </section>
+  `;
+}
+
+function renderAdmin() {
+  const items = [
+    ...state.questions.map((item) => ({ ...item, type: "questions", body: item.text })),
+    ...state.posts.map((item) => ({ ...item, type: "posts", body: item.text })),
+    ...state.stories.map((item) => ({ ...item, type: "stories", body: item.text }))
+  ].sort((a, b) => b.createdAt - a.createdAt);
+  const hidden = items.filter((item) => item.reviewStatus === "hidden").length;
+  const pending = items.filter((item) => item.reviewStatus === "pending").length;
+  const storageSize = new Blob([JSON.stringify(state)]).size;
+  return `
+    <section class="stack">
+      <div class="card profile-card admin-hero">
+        <h1 class="question-title">管理员视角</h1>
+        <p class="hint">用于内测时查看运行状态、内容审核和基础错误线索。这里是本地模拟后台，不连接真实服务器。</p>
+        <div class="admin-stats">
+          <div class="soft-panel"><strong>${state.users.length}</strong><div class="hint">账号档案</div></div>
+          <div class="soft-panel"><strong>${state.questions.length}</strong><div class="hint">烦恼屋问题</div></div>
+          <div class="soft-panel"><strong>${state.links.length}</strong><div class="hint">深度链接</div></div>
+          <div class="soft-panel"><strong>${Math.round(storageSize / 1024)}KB</strong><div class="hint">本地数据</div></div>
+        </div>
+        <div class="hint">审核提示：待审 ${pending} 条 · 已隐藏 ${hidden} 条 · 脚本运行状态正常</div>
+      </div>
+      <div class="split">
+        <div class="card profile-card">
+          <h2>文字审核</h2>
+          <div class="touch-list">
+            ${items.map((item) => renderReviewItem(item)).join("")}
+          </div>
+        </div>
+        <div class="card profile-card">
+          <h2>运行检查</h2>
+          <div class="soft-panel">
+            <strong>当前模块</strong>
+            <div class="hint">注册、档案、feed、轻触、拉手、关系聊天、她意识、个人主页均已加载。</div>
+          </div>
+          <div class="soft-panel">
+            <strong>审核动作记录</strong>
+            ${state.auditLog.length ? state.auditLog.slice(0, 6).map((log) => `<div class="hint">${esc(log.text)} · ${timeAgo(log.createdAt)}</div>`).join("") : `<div class="hint">暂无记录。</div>`}
+          </div>
+          <button class="btn secondary" data-action="admin-scan">重新扫描</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderReviewItem(item) {
+  const status = item.reviewStatus || "approved";
+  return `
+    <div class="soft-panel review-item ${status}">
+      <div class="tag-row">
+        <span class="tag purple">${esc(adminReviewTypes[item.type])}</span>
+        <span class="tag ${status === "hidden" ? "hot" : "warm"}">${status === "hidden" ? "已隐藏" : status === "pending" ? "待审" : "已通过"}</span>
+      </div>
+      <div class="review-text">${esc(item.body).slice(0, 220)}${item.body.length > 220 ? "..." : ""}</div>
+      <div class="button-row">
+        <button class="btn secondary" data-action="review-approve" data-review-type="${item.type}" data-id="${item.id}">通过</button>
+        <button class="btn secondary" data-action="review-pending" data-review-type="${item.type}" data-id="${item.id}">标为待审</button>
+        <button class="btn ghost" data-action="review-hide" data-review-type="${item.type}" data-id="${item.id}">隐藏</button>
+      </div>
+    </div>
   `;
 }
 
@@ -984,6 +1271,9 @@ function renderProtocolModal() {
           ${["随时", "每周一次", "不定期"].map((item) => `<option value="${item}" ${expect.frequency === item ? "selected" : ""}>${item}</option>`).join("")}
         </select>
       </label>
+      <label class="field"><span class="label">成长目标/关系目标</span>
+        <textarea class="textarea" id="link-goal" placeholder="比如：三周内梳理职业方向，完成一次复盘。">${esc(expect.growthGoal || "")}</textarea>
+      </label>
       <div class="button-row">
         <button class="btn" data-action="protocol-review">展示给对方</button>
         <button class="btn secondary" data-action="close-modal">取消</button>
@@ -1002,6 +1292,7 @@ function renderProtocolReviewModal() {
       <div>关系类型：<strong>${esc(expect.type)}</strong></div>
       <div>预期周期：<strong>${esc(expect.cycle)}</strong></div>
       <div>沟通频率：<strong>${esc(expect.frequency)}</strong></div>
+      <div>共同目标：<strong>${esc(expect.growthGoal || "先从72小时试聊开始")}</strong></div>
     </div>
     <p class="hint">对方可接受或提出修改，最多协商两轮。当前第 ${rounds + 1} 轮。</p>
     <div class="button-row">
@@ -1355,20 +1646,27 @@ function createLink() {
     .find((match) => match.user.id === target.id)?.reasons.join(" / ") || "档案综合契合";
   state.links.unshift({
     id: uid("link"),
+    chatId,
     memberIds: [state.currentUserId, target.id],
-    type: expect.type,
+    type: normalizeRelationType(expect.type),
     cycle: expect.cycle,
     frequency: expect.frequency,
     status: "进行中",
     reason,
+    growthGoal: state.modal.growthGoal || "先把当下最想成长的一件事说清楚，再一起走一小段。",
+    checkins: [],
+    buddyList: [],
+    diaries: [],
+    reviews: [],
+    quotes: [],
     createdAt: Date.now()
   });
   state.chats.unshift({
     id: chatId,
     memberIds: [state.currentUserId, target.id],
     messages: [
-      { from: target.id, text: "我接受了拉手请求。我们先从72小时试聊开始吧。", createdAt: Date.now() },
-      { from: state.currentUserId, text: "谢谢妳愿意接住我，期待慢慢聊。", createdAt: Date.now() + 1 }
+      { id: uid("msg"), from: target.id, text: "我接受了拉手请求。我们先从72小时试聊开始吧。", createdAt: Date.now() },
+      { id: uid("msg"), from: state.currentUserId, text: "谢谢妳愿意接住我，期待慢慢聊。", createdAt: Date.now() + 1 }
     ],
     createdAt: Date.now()
   });
@@ -1377,6 +1675,106 @@ function createLink() {
   state.notifications.unshift({ id: uid("n"), message: `拉手被 ${target.profile.nickname} 接受 +20🌡️，72小时试聊已开放`, unread: true, createdAt: Date.now() });
   state.modal = { type: "link-done" };
   saveAndRender();
+}
+
+function findLink(id) {
+  return state.links.find((link) => link.id === id);
+}
+
+function appendRelationMessage(link, text, kind = "") {
+  if (!link) return;
+  const chat = chatForLink(link);
+  if (!chat) return;
+  chat.messages.push({ id: uid("msg"), from: state.currentUserId, text, kind, createdAt: Date.now() });
+}
+
+function runGoalCheckin(link) {
+  if (!link) return;
+  const text = window.prompt("写下这次目标打卡进展");
+  if (!text) return;
+  const reply = window.prompt("mentor回应一句支持或建议") || "收到这次进展，我们下次继续往前走一点。";
+  link.checkins.unshift({ id: uid("check"), text, reply, createdAt: Date.now() });
+  appendRelationMessage(link, `目标打卡：${text}\nmentor回应：${reply}`, "目标打卡");
+}
+
+function writeDiary(link) {
+  if (!link) return;
+  const text = window.prompt("写下只给自己看的感受日记");
+  if (!text) return;
+  link.diaries.unshift({ id: uid("diary"), userId: state.currentUserId, text, createdAt: Date.now(), private: true });
+  toast("感受日记已保存，仅自己可见");
+}
+
+function runCycleReview(link) {
+  if (!link) return;
+  const text = window.prompt("写下这段周期的简单复盘感受");
+  if (!text) return;
+  link.reviews.unshift({ id: uid("review"), userId: state.currentUserId, text, createdAt: Date.now() });
+  appendRelationMessage(link, `周期复盘：${text}`, "复盘");
+  if (window.confirm("要把这段关系标记为正式毕业吗？取消则保持进行中。")) {
+    link.status = "正式毕业";
+    currentUser().graduations = asArray(currentUser().graduations);
+    const peer = getPeer(link.memberIds);
+    currentUser().graduations.unshift({ peerName: peer.profile.nickname, type: link.type, createdAt: Date.now() });
+  }
+}
+
+function addBuddyItem(link) {
+  if (!link) return;
+  const text = window.prompt("添加一件想一起完成的事");
+  if (!text) return;
+  link.buddyList.push(text);
+  appendRelationMessage(link, `新增搭子清单：${text}`, "搭子清单");
+}
+
+function sendBuddySticker(link) {
+  if (!link) return;
+  const sticker = window.prompt("选择今日打卡小贴纸", "🌷 今天也并肩了一下");
+  if (!sticker) return;
+  appendRelationMessage(link, sticker, "今日打卡");
+}
+
+function sendMoodSticker(link) {
+  if (!link) return;
+  const mood = window.prompt("发一个今天的心情贴纸", "☁️ 今天有点软软的");
+  if (!mood) return;
+  appendRelationMessage(link, mood, "今天的心情");
+}
+
+function sendVoiceNote(link) {
+  if (!link) return;
+  const note = window.prompt("模拟语音小留言内容");
+  if (!note) return;
+  appendRelationMessage(link, `语音小留言：${note}`, "语音");
+}
+
+function pauseOrEndLink(link) {
+  if (!link) return;
+  if (!window.confirm("确认暂停或结束这段关系吗？系统不会追问原因。")) return;
+  link.status = link.status === "已暂停" ? "已结束" : "已暂停";
+  appendRelationMessage(link, `关系状态更新：${link.status}`, "系统");
+}
+
+function renewLink(link) {
+  if (!link) return;
+  const cycle = window.prompt("写下新的周期约定", link.cycle || "1-3个月");
+  if (!cycle) return;
+  link.cycle = cycle;
+  link.status = "进行中";
+  appendRelationMessage(link, `关系已续期：${cycle}`, "续期");
+}
+
+function reviewCollection(type) {
+  if (type === "questions") return state.questions;
+  if (type === "posts") return state.posts;
+  return state.stories;
+}
+
+function setReviewStatus(type, id, status) {
+  const item = reviewCollection(type).find((entry) => entry.id === id);
+  if (!item) return;
+  item.reviewStatus = status;
+  state.auditLog.unshift({ id: uid("audit"), text: `${adminReviewTypes[type]} 已${status === "hidden" ? "隐藏" : status === "pending" ? "标为待审" : "通过"}`, createdAt: Date.now() });
 }
 
 function timeAgo(ts) {
@@ -1499,8 +1897,10 @@ app.addEventListener("click", (event) => {
     state.modal.expect = {
       type: document.querySelector("#link-type").value,
       cycle: document.querySelector("#link-cycle").value,
-      frequency: document.querySelector("#link-frequency").value
+      frequency: document.querySelector("#link-frequency").value,
+      growthGoal: document.querySelector("#link-goal").value.trim()
     };
+    state.modal.growthGoal = state.modal.expect.growthGoal;
     state.modal.type = "protocol-review";
     saveAndRender();
   }
@@ -1531,7 +1931,56 @@ app.addEventListener("click", (event) => {
     const text = document.querySelector("#chat-input")?.value.trim();
     if (!text) return;
     const chat = state.chats.find((item) => item.id === el.dataset.id);
-    chat.messages.push({ from: state.currentUserId, text, createdAt: Date.now() });
+    chat.messages.push({ id: uid("msg"), from: state.currentUserId, text, createdAt: Date.now() });
+    saveAndRender();
+  }
+  if (action === "toggle-quote") {
+    const chat = state.chats.find((item) => item.id === el.dataset.chatId);
+    const msg = chat?.messages.find((item) => item.id === el.dataset.msgId);
+    const link = chat ? linkForChat(chat) : null;
+    if (msg && link) {
+      msg.starred = !msg.starred;
+      link.quotes = asArray(link.quotes);
+      link.quotes = msg.starred
+        ? [{ id: uid("quote"), text: msg.text, createdAt: Date.now() }, ...link.quotes]
+        : link.quotes.filter((quote) => quote.text !== msg.text);
+      saveAndRender();
+    }
+  }
+  if (action === "goal-checkin") {
+    runGoalCheckin(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "open-diary") {
+    writeDiary(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "cycle-review") {
+    runCycleReview(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "add-buddy-item") {
+    addBuddyItem(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "buddy-sticker") {
+    sendBuddySticker(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "mood-sticker") {
+    sendMoodSticker(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "voice-note") {
+    sendVoiceNote(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "pause-link") {
+    pauseOrEndLink(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "renew-link") {
+    renewLink(findLink(el.dataset.linkId));
     saveAndRender();
   }
   if (action === "open-post") {
@@ -1543,7 +1992,7 @@ app.addEventListener("click", (event) => {
     const image = document.querySelector("#post-image")?.value.trim();
     if (!text) return toast("请写一点内容");
     const user = currentUser();
-    state.posts.unshift({ id: uid("p"), userId: user.id, nickname: user.profile.nickname, text, image, likes: 0, comments: [], saved: false, createdAt: Date.now() });
+    state.posts.unshift({ id: uid("p"), userId: user.id, nickname: user.profile.nickname, text, image, likes: 0, comments: [], saved: false, reviewStatus: "approved", createdAt: Date.now() });
     state.modal = null;
     saveAndRender();
   }
@@ -1571,7 +2020,7 @@ app.addEventListener("click", (event) => {
     const text = document.querySelector("#story-text")?.value.trim();
     if (!text) return toast("请先写下故事");
     const user = currentUser();
-    state.stories.unshift({ id: uid("s"), userId: user.id, nickname: mode === "anonymous" ? "匿名姐妹" : user.profile.nickname, anonymous: mode === "anonymous", text, touches: 0, createdAt: Date.now() });
+    state.stories.unshift({ id: uid("s"), userId: user.id, nickname: mode === "anonymous" ? "匿名姐妹" : user.profile.nickname, anonymous: mode === "anonymous", text, touches: 0, reviewStatus: "approved", createdAt: Date.now() });
     state.modal = null;
     saveAndRender();
   }
@@ -1604,6 +2053,24 @@ app.addEventListener("click", (event) => {
     state.stage = "profile";
     state.modal = null;
     saveAndRender();
+  }
+  if (action === "logout") {
+    state.currentUserId = null;
+    state.stage = "welcome";
+    state.activeNav = "home";
+    state.activeChatId = null;
+    state.modal = null;
+    saveAndRender();
+  }
+  if (action === "review-approve" || action === "review-pending" || action === "review-hide") {
+    const status = action === "review-hide" ? "hidden" : action === "review-pending" ? "pending" : "approved";
+    setReviewStatus(el.dataset.reviewType, el.dataset.id, status);
+    saveAndRender();
+  }
+  if (action === "admin-scan") {
+    state.auditLog.unshift({ id: uid("audit"), text: "运行检查完成，未发现脚本错误", createdAt: Date.now() });
+    saveAndRender();
+    toast("扫描完成");
   }
   if (action === "tutorial-next") {
     const user = currentUser();

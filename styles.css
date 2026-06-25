@@ -565,6 +565,11 @@ button {
   touch-action: pan-y;
 }
 
+.active-chat-row {
+  border-color: rgba(232, 130, 154, 0.45);
+  box-shadow: 0 0 0 4px rgba(232, 130, 154, 0.08);
+}
+
 .tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -635,6 +640,98 @@ button {
   background: #fffafb;
   border: 1px dashed #efc9d2;
   line-height: 1.6;
+}
+
+.relation-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.relation-header.mentor {
+  background: linear-gradient(135deg, rgba(242, 196, 160, 0.12), rgba(232, 130, 154, 0.12));
+}
+
+.relation-header.buddy {
+  background: linear-gradient(135deg, rgba(201, 168, 212, 0.12), rgba(242, 196, 160, 0.12));
+}
+
+.relation-header.care {
+  background: linear-gradient(135deg, rgba(232, 130, 154, 0.1), rgba(201, 168, 212, 0.12));
+}
+
+.relation-tools {
+  padding: 14px 16px 16px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+}
+
+.goal-panel {
+  border-style: dashed;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mini-note {
+  padding: 12px;
+  border-radius: 14px;
+  background: #fffafb;
+  border: 1px solid var(--line);
+  line-height: 1.55;
+}
+
+.buddy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.msg-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.msg-wrap.mine {
+  justify-items: end;
+}
+
+.quote-btn {
+  border: 0;
+  background: transparent;
+  color: var(--rose-deep);
+  font-size: 12px;
+}
+
+.special-msg {
+  border: 1px solid rgba(232, 130, 154, 0.22);
+}
+
+.admin-hero {
+  padding: 20px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.review-item.hidden {
+  opacity: 0.62;
+}
+
+.review-text {
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.logout-zone {
+  border-style: dashed;
 }
 
 .post-card,
@@ -928,6 +1025,11 @@ button {
   .light-tabs {
     grid-template-columns: 1fr 1fr;
     border-radius: 18px;
+  }
+
+  .tool-grid,
+  .admin-stats {
+    grid-template-columns: 1fr;
   }
 
   .topbar {
