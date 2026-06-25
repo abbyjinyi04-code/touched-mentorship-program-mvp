@@ -1,4 +1,6 @@
 const STORAGE_KEY = "touched-mvp-state-v1";
+const BACKUP_KEY = "touched-mvp-state-v1-backup";
+const SESSION_KEY = "touched-mvp-current-user";
 const app = document.querySelector("#app");
 const toastRoot = document.querySelector("#toast-root");
 
@@ -223,6 +225,7 @@ function initialState() {
     stage: "welcome",
     users,
     currentUserId: null,
+    rememberedUserId: null,
     profileStep: 0,
     profileDraft: {},
     activeNav: "home",
@@ -231,6 +234,8 @@ function initialState() {
     activeChatId: null,
     modal: null,
     notifications: [],
+    auditLog: [],
+    lastSavedAt: Date.now(),
     questions: [
       {
         id: uid("q"),
@@ -295,11 +300,24 @@ function initialState() {
 
 function loadState() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(BACKUP_KEY);
     if (!saved) return initialState();
-    return normalizeState({ ...initialState(), ...JSON.parse(saved) });
+    const parsed = normalizeState({ ...initialState(), ...JSON.parse(saved) });
+    const rememberedId = localStorage.getItem(SESSION_KEY) || parsed.rememberedUserId || parsed.currentUserId;
+    const rememberedUser = parsed.users.find((user) => user.id === rememberedId && user.profileComplete);
+    if (rememberedUser) {
+      parsed.currentUserId = rememberedUser.id;
+      parsed.rememberedUserId = rememberedUser.id;
+      parsed.stage = "main";
+    }
+    return parsed;
   } catch {
-    return initialState();
+    try {
+      const backup = localStorage.getItem(BACKUP_KEY);
+      return backup ? normalizeState({ ...initialState(), ...JSON.parse(backup) }) : initialState();
+    } catch {
+      return initialState();
+    }
   }
 }
 
@@ -323,6 +341,9 @@ function normalizeState(nextState) {
     type: normalizeRelationType(link.type),
     createdAt: link.createdAt || Date.now(),
     growthGoal: link.growthGoal || "建立稳定的成长节奏，把当下最卡住的问题拆成可执行的小步。",
+    mentorId: link.mentorId || inferMentorId(link),
+    menteeId: link.menteeId || inferMenteeId(link),
+    rolesConfirmed: link.rolesConfirmed !== false,
     checkins: asArray(link.checkins),
     buddyList: asArray(link.buddyList),
     diaries: asArray(link.diaries),
@@ -336,6 +357,7 @@ function normalizeState(nextState) {
   }));
   nextState.users = asArray(nextState.users).map((user) => ({
     ...user,
+    lastLoginAt: user.lastLoginAt || Date.now(),
     tutorialSeen: Boolean(user.tutorialSeen)
   }));
   nextState.auditLog = asArray(nextState.auditLog);
@@ -343,7 +365,11 @@ function normalizeState(nextState) {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  state.lastSavedAt = Date.now();
+  const payload = JSON.stringify(state);
+  localStorage.setItem(STORAGE_KEY, payload);
+  localStorage.setItem(BACKUP_KEY, payload);
+  if (state.currentUserId) localStorage.setItem(SESSION_KEY, state.currentUserId);
 }
 
 function uid(prefix) {
@@ -377,6 +403,26 @@ function relationMeta(type) {
   return relationshipMeta[normalizeRelationType(type)] || relationshipMeta.mentorship;
 }
 
+function inferMentorId(link) {
+  if (normalizeRelationType(link.type) !== "mentorship") return "";
+  const members = asArray(link.memberIds);
+  return link.mentorId || members[1] || members[0] || "";
+}
+
+function inferMenteeId(link) {
+  if (normalizeRelationType(link.type) !== "mentorship") return "";
+  const members = asArray(link.memberIds);
+  return link.menteeId || members[0] || members[1] || "";
+}
+
+function isMentor(link) {
+  return normalizeRelationType(link?.type) === "mentorship" && link.mentorId === state.currentUserId;
+}
+
+function isMentee(link) {
+  return normalizeRelationType(link?.type) === "mentorship" && link.menteeId === state.currentUserId;
+}
+
 function toast(message) {
   const node = document.createElement("div");
   node.className = "toast";
@@ -389,6 +435,10 @@ function notify(message) {
   state.notifications.unshift({ id: uid("n"), message, createdAt: Date.now(), unread: true });
   saveAndRender();
   toast(message);
+}
+
+function visibleNotifications() {
+  return asArray(state.notifications).filter((item) => !item.toUserId || item.toUserId === state.currentUserId);
 }
 
 function saveAndRender() {
@@ -405,6 +455,7 @@ function render() {
 }
 
 function renderWelcome() {
+  const rememberedUser = state.currentUserId ? getUser(state.currentUserId) : getUser(state.rememberedUserId);
   app.innerHTML = `
     <main class="page center-page welcome">
       <section class="narrow welcome-copy">
@@ -420,6 +471,13 @@ function renderWelcome() {
             <button class="palm-button" data-action="start">I'm in ✨</button>
           </div>
         </div>
+        ${rememberedUser?.profileComplete ? `
+          <div class="card soft-panel">
+            <strong>欢迎回来，${esc(rememberedUser.profile.nickname)}</strong>
+            <div class="hint">这个浏览器已记住妳的账号和聊天记录。</div>
+            ${state.currentUserId ? `<button class="btn secondary" data-action="continue-session">继续进入</button>` : `<button class="btn secondary" data-action="open-login">已有账号，返回登录</button>`}
+          </div>
+        ` : ""}
       </section>
       <button class="think-link" data-action="exit">我再想想</button>
     </main>
@@ -445,6 +503,7 @@ function renderRegister() {
             </label>
             <button class="btn" type="submit">生成账号ID ✨</button>
           </form>
+          ${state.users.some((user) => !user.virtual && user.profileComplete) ? `<button class="btn secondary" data-action="open-login">已有账号，返回登录</button>` : ""}
         </div>
       </section>
     </main>
@@ -477,9 +536,28 @@ function handleRegister(event) {
   };
   state.users.push(user);
   state.currentUserId = id;
+  state.rememberedUserId = id;
   state.profileDraft = {};
   state.profileStep = 0;
   state.stage = "profile";
+  saveAndRender();
+}
+
+function handleLogin() {
+  const loginId = document.querySelector("#login-id")?.value.trim();
+  const password = document.querySelector("#login-password")?.value.trim();
+  const remember = document.querySelector("#login-remember")?.checked;
+  const user = state.users.find((item) => !item.virtual && (item.phone === loginId || item.accountId === loginId) && item.password === password);
+  if (!user) {
+    toast("没有找到匹配账号，请检查手机号/账号ID和密码");
+    return;
+  }
+  user.lastLoginAt = Date.now();
+  state.currentUserId = user.id;
+  state.rememberedUserId = remember ? user.id : "";
+  state.stage = user.profileComplete ? "main" : "profile";
+  state.modal = null;
+  if (remember) localStorage.setItem(SESSION_KEY, user.id);
   saveAndRender();
 }
 
@@ -568,7 +646,7 @@ function renderProfileField(step) {
 }
 
 function renderMain() {
-  const unread = state.notifications.filter((item) => item.unread).length;
+  const unread = visibleNotifications().filter((item) => item.unread).length;
   app.innerHTML = `
     <main class="main-layout page">
       <section class="wide">
@@ -753,6 +831,9 @@ function ensureDemoRelationships() {
       reason: "内测演示关系，用于体验不同聊天界面。",
       createdAt: Date.now() - (index + 2) * 86400000,
       growthGoal: demo.goal,
+      mentorId: demo.type === "mentorship" ? target.id : "",
+      menteeId: demo.type === "mentorship" ? user.id : "",
+      rolesConfirmed: true,
       checkins: [],
       buddyList: demo.type === "搭子" ? ["一起完成一周三次打卡", "周末交换灵感清单"] : [],
       diaries: [],
@@ -874,21 +955,28 @@ function renderRelationTools(link, chat) {
 
 function renderMentorshipTools(link, chat) {
   const latest = asArray(link.checkins)[0];
+  const mentee = getUser(link.menteeId);
+  const mentor = getUser(link.mentorId);
+  const pending = asArray(link.checkins).find((item) => item.status === "pending");
   return `
     <div class="relation-tools mentor">
       <div class="soft-panel goal-panel">
         <div class="tiny">成长目标固定显示</div>
         <strong>${esc(link.growthGoal)}</strong>
+        <div class="hint">mentor：${esc(mentor?.profile?.nickname || "待确认")} · mentee：${esc(mentee?.profile?.nickname || "待确认")}</div>
       </div>
       <div class="tool-grid">
-        <button class="btn secondary" data-action="goal-checkin" data-link-id="${link.id}">目标打卡</button>
+        ${isMentee(link) ? `<button class="btn secondary" data-action="goal-checkin" data-link-id="${link.id}">目标打卡</button>` : ""}
+        ${isMentor(link) && pending ? `<button class="btn" data-action="mentor-reply-checkin" data-link-id="${link.id}" data-checkin-id="${pending.id}">回应 mentee 打卡</button>` : ""}
         <button class="btn secondary" data-action="open-diary" data-link-id="${link.id}">感受日记</button>
         <button class="btn secondary" data-action="cycle-review" data-link-id="${link.id}">周期复盘</button>
         <button class="btn secondary" data-action="renew-link" data-link-id="${link.id}">续期</button>
         <button class="btn ghost" data-action="pause-link" data-link-id="${link.id}">暂停/结束</button>
       </div>
+      ${!link.rolesConfirmed ? `<div class="mini-note">身份尚未确认，目标打卡暂不可用。</div>` : ""}
+      ${isMentor(link) && pending ? `<div class="mini-note">妳的 mentee ${esc(mentee?.profile?.nickname || "")} 完成一条目标打卡，快去鼓励她吧～</div>` : ""}
       <div class="hint">提醒：这段时间妳们走过了什么？写下来留个印记吧～</div>
-      ${latest ? `<div class="mini-note">最近打卡：${esc(latest.text)}<br><span class="hint">mentor回应：${esc(latest.reply)}</span></div>` : ""}
+      ${latest ? `<div class="mini-note">最近打卡：${esc(latest.text)}<br><span class="hint">状态：${latest.status === "pending" ? "等待 mentor 回应" : `mentor回应：${esc(latest.reply)}`}</span></div>` : ""}
       ${asArray(link.quotes).length ? `<div class="mini-note">成长金句：${asArray(link.quotes).map((q) => esc(q.text)).join(" / ")}</div>` : ""}
       ${asArray(link.reviews).length ? `<div class="mini-note">复盘已完成：${asArray(link.reviews).map((r) => esc(r.text)).join(" / ")}</div>` : ""}
     </div>
@@ -1008,7 +1096,12 @@ function renderMe() {
         </div>
         <div class="card profile-card logout-zone">
           <h2>账号</h2>
-          <p class="hint">退出后会回到最开始的欢迎界面，本机内测数据仍保存在当前浏览器。</p>
+          <div class="soft-panel">
+            <strong>本地数据保存中</strong>
+            <div class="hint">账号、档案、聊天记录、深度链接关系都保存在当前浏览器 localStorage，并有一份自动备份。不会上传到 GitHub 或任何服务器。</div>
+            <div class="hint tiny">最后保存：${new Date(state.lastSavedAt || Date.now()).toLocaleString("zh-CN")}</div>
+          </div>
+          <p class="hint">退出后会回到最开始的欢迎界面，本机内测数据仍会保留，方便下次继续进入。</p>
           <button class="btn secondary" data-action="logout">退出登录</button>
         </div>
       </div>
@@ -1111,6 +1204,7 @@ function renderModal() {
   if (state.modal.type === "story") return renderStoryModal();
   if (state.modal.type === "notifications") return renderNotificationsModal();
   if (state.modal.type === "me-edit") return renderMeEditModal();
+  if (state.modal.type === "login") return renderLoginModal();
   if (state.modal.type === "tutorial") return renderTutorialModal();
   return "";
 }
@@ -1252,15 +1346,24 @@ function renderLinkRequestModal() {
 
 function renderProtocolModal() {
   const expect = state.modal.expect || {};
+  const target = getUser(state.modal.targetId);
   return modalWrap(`
     <h2>链接协议</h2>
-    <p class="hint">A先填写期望：关系类型、预期周期、沟通频率。确认后展示给对方。</p>
+    <p class="hint">A先填写期望。若选择 Mentorship，需要先确认谁是 mentor、谁是 mentee，双方确认后目标打卡才会开启。</p>
     <div class="stack">
       <label class="field"><span class="label">关系类型</span>
         <select class="select" id="link-type">
           ${["mentorship", "搭子", "陪伴"].map((item) => `<option value="${item}" ${expect.type === item ? "selected" : ""}>${item}</option>`).join("")}
         </select>
       </label>
+      <div class="soft-panel">
+        <div class="label">Mentorship 身份确认</div>
+        <div class="hint">如果不是 mentorship，这里会作为关系角色备注保存。</div>
+        <div class="bubble-grid" style="margin-top:10px">
+          <button class="bubble ${expect.mentorId === state.currentUserId ? "selected" : ""}" data-action="role-pick" data-role="me-mentor">我是 mentor，${esc(target.profile.nickname)} 是 mentee</button>
+          <button class="bubble ${expect.menteeId === state.currentUserId ? "selected" : ""}" data-action="role-pick" data-role="me-mentee">我是 mentee，${esc(target.profile.nickname)} 是 mentor</button>
+        </div>
+      </div>
       <label class="field"><span class="label">预期周期</span>
         <select class="select" id="link-cycle">
           ${["短期目标导向", "1-3个月", "长期半年以上", "随缘"].map((item) => `<option value="${item}" ${expect.cycle === item ? "selected" : ""}>${item}</option>`).join("")}
@@ -1290,6 +1393,8 @@ function renderProtocolReviewModal() {
     <h2>展示给 ${esc(target.profile.nickname)}</h2>
     <div class="soft-panel">
       <div>关系类型：<strong>${esc(expect.type)}</strong></div>
+      <div>mentor：<strong>${esc(getUser(expect.mentorId)?.profile?.nickname || "待确认")}</strong></div>
+      <div>mentee：<strong>${esc(getUser(expect.menteeId)?.profile?.nickname || "待确认")}</strong></div>
       <div>预期周期：<strong>${esc(expect.cycle)}</strong></div>
       <div>沟通频率：<strong>${esc(expect.frequency)}</strong></div>
       <div>共同目标：<strong>${esc(expect.growthGoal || "先从72小时试聊开始")}</strong></div>
@@ -1345,7 +1450,7 @@ function renderStoryModal() {
 }
 
 function renderNotificationsModal() {
-  const list = state.notifications;
+  const list = visibleNotifications();
   return modalWrap(`
     <h2>顶部通知</h2>
     <div class="stack">
@@ -1365,6 +1470,22 @@ function renderMeEditModal() {
       <label class="field"><span class="label">个人签名</span><input class="input" id="me-signature" value="${esc(user.signature || "")}" /></label>
       <div class="button-row">
         <button class="btn" data-action="save-me-edit">保存</button>
+        <button class="btn secondary" data-action="close-modal">取消</button>
+      </div>
+    </div>
+  `);
+}
+
+function renderLoginModal() {
+  return modalWrap(`
+    <h2>回到妳的账号</h2>
+    <p class="hint">账号数据只保存在当前浏览器。输入手机号或账号ID即可继续之前的聊天和档案。</p>
+    <div class="stack">
+      <label class="field"><span class="label">手机号或账号ID</span><input class="input" id="login-id" placeholder="手机号 / TCH-xxxxxx" /></label>
+      <label class="field"><span class="label">密码</span><input class="input" id="login-password" type="password" placeholder="注册时设置的密码" /></label>
+      <label class="remember-row"><input type="checkbox" id="login-remember" checked /> <span>记住这台设备，下次自动进入</span></label>
+      <div class="button-row">
+        <button class="btn" data-action="login-submit">进入她触</button>
         <button class="btn secondary" data-action="close-modal">取消</button>
       </div>
     </div>
@@ -1654,6 +1775,9 @@ function createLink() {
     status: "进行中",
     reason,
     growthGoal: state.modal.growthGoal || "先把当下最想成长的一件事说清楚，再一起走一小段。",
+    mentorId: expect.mentorId || target.id,
+    menteeId: expect.menteeId || state.currentUserId,
+    rolesConfirmed: normalizeRelationType(expect.type) !== "mentorship" || Boolean(expect.mentorId && expect.menteeId),
     checkins: [],
     buddyList: [],
     diaries: [],
@@ -1690,11 +1814,46 @@ function appendRelationMessage(link, text, kind = "") {
 
 function runGoalCheckin(link) {
   if (!link) return;
+  if (!link.rolesConfirmed || !isMentee(link)) {
+    toast("只有确认身份后的 mentee 可以发起目标打卡");
+    return;
+  }
   const text = window.prompt("写下这次目标打卡进展");
   if (!text) return;
-  const reply = window.prompt("mentor回应一句支持或建议") || "收到这次进展，我们下次继续往前走一点。";
-  link.checkins.unshift({ id: uid("check"), text, reply, createdAt: Date.now() });
-  appendRelationMessage(link, `目标打卡：${text}\nmentor回应：${reply}`, "目标打卡");
+  const checkin = { id: uid("check"), text, reply: "", status: "pending", createdAt: Date.now(), menteeId: state.currentUserId };
+  link.checkins.unshift(checkin);
+  const mentee = currentUser();
+  state.notifications.unshift({
+    id: uid("n"),
+    toUserId: link.mentorId,
+    message: `妳的 mentee ${mentee.profile.nickname} 完成一条目标打卡，快去鼓励她吧～`,
+    unread: true,
+    createdAt: Date.now()
+  });
+  appendRelationMessage(link, `目标打卡：${text}\n等待 mentor 回应。`, "目标打卡");
+}
+
+function mentorReplyCheckin(link, checkinId) {
+  if (!link || !isMentor(link)) {
+    toast("只有 mentor 可以回应 mentee 的目标打卡");
+    return;
+  }
+  const checkin = asArray(link.checkins).find((item) => item.id === checkinId);
+  if (!checkin) return;
+  const reply = window.prompt("写下给 mentee 的鼓励或建议");
+  if (!reply) return;
+  checkin.reply = reply;
+  checkin.status = "replied";
+  checkin.repliedAt = Date.now();
+  const mentor = currentUser();
+  state.notifications.unshift({
+    id: uid("n"),
+    toUserId: link.menteeId,
+    message: `${mentor.profile.nickname} 回应了妳的目标打卡`,
+    unread: true,
+    createdAt: Date.now()
+  });
+  appendRelationMessage(link, `mentor回应：${reply}`, "目标回应");
 }
 
 function writeDiary(link) {
@@ -1793,6 +1952,18 @@ app.addEventListener("click", (event) => {
     state.stage = "register";
     saveAndRender();
   }
+  if (action === "continue-session") {
+    state.stage = "main";
+    state.activeNav = "home";
+    saveAndRender();
+  }
+  if (action === "open-login") {
+    state.modal = { type: "login" };
+    saveAndRender();
+  }
+  if (action === "login-submit") {
+    handleLogin();
+  }
   if (action === "exit") toast("妳可以随时再回来，这束光会一直在这里。");
   if (action === "profile-bubble") {
     toggleValue(el, el.dataset.key, el.dataset.kind, el.dataset.value);
@@ -1890,7 +2061,30 @@ app.addEventListener("click", (event) => {
     saveAndRender();
   }
   if (action === "link-accept") {
-    state.modal = { ...state.modal, type: "protocol", expect: { type: "mentorship", cycle: "1-3个月", frequency: "每周一次" }, rounds: 0 };
+    state.modal = {
+      ...state.modal,
+      type: "protocol",
+      expect: {
+        type: "mentorship",
+        cycle: "1-3个月",
+        frequency: "每周一次",
+        mentorId: state.modal.targetId,
+        menteeId: state.currentUserId,
+        growthGoal: ""
+      },
+      rounds: 0
+    };
+    saveAndRender();
+  }
+  if (action === "role-pick") {
+    const targetId = state.modal.targetId;
+    if (el.dataset.role === "me-mentor") {
+      state.modal.expect.mentorId = state.currentUserId;
+      state.modal.expect.menteeId = targetId;
+    } else {
+      state.modal.expect.mentorId = targetId;
+      state.modal.expect.menteeId = state.currentUserId;
+    }
     saveAndRender();
   }
   if (action === "protocol-review") {
@@ -1898,8 +2092,14 @@ app.addEventListener("click", (event) => {
       type: document.querySelector("#link-type").value,
       cycle: document.querySelector("#link-cycle").value,
       frequency: document.querySelector("#link-frequency").value,
-      growthGoal: document.querySelector("#link-goal").value.trim()
+      growthGoal: document.querySelector("#link-goal").value.trim(),
+      mentorId: state.modal.expect.mentorId,
+      menteeId: state.modal.expect.menteeId
     };
+    if (state.modal.expect.type === "mentorship" && (!state.modal.expect.mentorId || !state.modal.expect.menteeId)) {
+      toast("请先确认 mentor 和 mentee 身份");
+      return;
+    }
     state.modal.growthGoal = state.modal.expect.growthGoal;
     state.modal.type = "protocol-review";
     saveAndRender();
@@ -1949,6 +2149,10 @@ app.addEventListener("click", (event) => {
   }
   if (action === "goal-checkin") {
     runGoalCheckin(findLink(el.dataset.linkId));
+    saveAndRender();
+  }
+  if (action === "mentor-reply-checkin") {
+    mentorReplyCheckin(findLink(el.dataset.linkId), el.dataset.checkinId);
     saveAndRender();
   }
   if (action === "open-diary") {
@@ -2030,7 +2234,7 @@ app.addEventListener("click", (event) => {
     saveAndRender();
   }
   if (action === "show-notifications") {
-    state.notifications.forEach((item) => { item.unread = false; });
+    visibleNotifications().forEach((item) => { item.unread = false; });
     state.modal = { type: "notifications" };
     saveAndRender();
   }
@@ -2060,6 +2264,7 @@ app.addEventListener("click", (event) => {
     state.activeNav = "home";
     state.activeChatId = null;
     state.modal = null;
+    localStorage.removeItem(SESSION_KEY);
     saveAndRender();
   }
   if (action === "review-approve" || action === "review-pending" || action === "review-hide") {
@@ -2125,5 +2330,20 @@ app.addEventListener("touchend", (event) => {
     saveAndRender();
   }
 }, { passive: true });
+
+window.addEventListener("beforeunload", () => {
+  saveState();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") saveState();
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key === STORAGE_KEY || event.key === BACKUP_KEY || event.key === SESSION_KEY) {
+    state = loadState();
+    render();
+  }
+});
 
 render();
